@@ -14,3 +14,12 @@ class CamelModel(BaseModel):
         populate_by_name=True,
         from_attributes=True,
     )
+
+
+class Page(CamelModel):
+    """Pagination envelope shared by all collection responses."""
+
+    page: int
+    limit: int
+    total_items: int
+    total_pages: int
