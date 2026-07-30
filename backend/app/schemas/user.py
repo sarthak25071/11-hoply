@@ -17,6 +17,16 @@ class UserRegistration(CamelModel):
     description: str | None = Field(default=None, max_length=1000)
 
 
+class UserUpdate(CamelModel):
+    """Partial update payload; omitted fields are left unchanged."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    age: int | None = Field(default=None, ge=13, le=120)
+    gender: Gender | None = None
+    description: str | None = Field(default=None, max_length=1000)
+    profile_photo: str | None = Field(default=None, max_length=500)
+
+
 class User(CamelModel):
     """Public representation of a user (no password hash)."""
 
@@ -30,6 +40,21 @@ class User(CamelModel):
     profile_photo: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_serializer("user_id")
+    def _serialize_user_id(self, value: int) -> str:
+        # IDs are opaque strings in the API contract.
+        return str(value)
+
+
+class TravellerProfile(CamelModel):
+    """Public traveller profile (no contact details)."""
+
+    user_id: int
+    name: str
+    gender: Gender | None = None
+    description: str | None = None
+    profile_photo: str | None = None
 
     @field_serializer("user_id")
     def _serialize_user_id(self, value: int) -> str:

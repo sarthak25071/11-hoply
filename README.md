@@ -219,6 +219,16 @@ Response:
 }
 ```
 
+### Call a protected endpoint
+
+Use the returned JWT in the `Authorization` header for authenticated routes:
+
+```powershell
+curl -X GET http://localhost:8080/v1/users/me \
+  -H "accept: application/json" \
+  -H "Authorization: Bearer <jwt>"
+```
+
 ---
 
 ## Error format
