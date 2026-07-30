@@ -2,9 +2,14 @@
 
 from app.core.security import hash_password
 from app.models.user import User
-from app.schemas.user import UserRegistration
+from app.schemas.user import UserRegistration, UserUpdate
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+
+def get_by_id(db: Session, user_id: int) -> User | None:
+    """Fetch a user by primary key (used for auth resolution and profile lookups)."""
+    return db.get(User, user_id)
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -34,6 +39,16 @@ def create(db: Session, data: UserRegistration) -> User:
         description=data.description,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update(db: Session, user: User, data: UserUpdate) -> User:
+    """Apply a partial update to an existing user and persist the change."""
+    changes = data.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(user, field, value)
     db.commit()
     db.refresh(user)
     return user
