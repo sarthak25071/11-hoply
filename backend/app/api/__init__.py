@@ -13,9 +13,13 @@ api_router = APIRouter()
 # ---- Implemented ----
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 
+# ---- Implemented ----
+from app.api.routes import users
+api_router.include_router(users.router, prefix="/users", tags=["Users"])
+
 # ---- Planned (mount routers here as they are implemented) ----
-# from app.api.routes import users, locations, travel_plans, matches, notifications
-# api_router.include_router(users.router, prefix="/users", tags=["Users"])
+# from app.api.routes import locations, travel_plans, matches, notifications
+# api_router.include_router(locations.router, prefix="/locations", tags=["Locations"])
 # api_router.include_router(locations.router, prefix="/locations", tags=["Locations"])
 # api_router.include_router(travel_plans.router, prefix="/travel-plans", tags=["Travel Plans"])
 # api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])

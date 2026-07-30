@@ -17,6 +17,18 @@ class UserRegistration(CamelModel):
     description: str | None = Field(default=None, max_length=1000)
 
 
+class UserUpdate(CamelModel):
+    """Fields a user may update (all optional; omitted fields are unchanged)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    age: int | None = Field(default=None, ge=13, le=120)
+    gender: Gender | None = None
+    description: str | None = Field(default=None, max_length=1000)
+    profession: str | None = Field(default=None, max_length=100)
+    hometown: str | None = Field(default=None, max_length=100)
+    profile_photo: str | None = Field(default=None)
+
+
 class User(CamelModel):
     """Public representation of a user (no password hash)."""
 
@@ -27,6 +39,8 @@ class User(CamelModel):
     age: int | None = None
     gender: Gender
     description: str | None = None
+    profession: str | None = None
+    hometown: str | None = None
     profile_photo: str | None = None
     created_at: datetime
     updated_at: datetime

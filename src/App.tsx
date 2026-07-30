@@ -10,7 +10,7 @@ import {
   LoginScreen,
   MatchRequestsScreen,
   NotificationsScreen,
-  ProfileSetupModal,
+  ProfileSetupScreen,
   SettingsScreen,
   TripsScreen,
   TravellerProfileScreen,
@@ -31,9 +31,17 @@ function AppRoutes() {
     );
   }
 
+  if (state.needsProfileSetup) {
+    return (
+      <Routes>
+        <Route path="/app/profile-setup" element={<ProfileSetupScreen />} />
+        <Route path="*" element={<Navigate to="/app/profile-setup" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <AppShell>
-      <ProfileSetupModal />
       <Routes>
         <Route path="/app/dashboard" element={<DashboardScreen />} />
         <Route path="/app/create-request" element={<CreateRequestScreen />} />

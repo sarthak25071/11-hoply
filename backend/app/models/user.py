@@ -30,6 +30,8 @@ class User(Base):
         default=Gender.prefer_not_to_say,
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    profession: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    hometown: Mapped[str | None] = mapped_column(String(100), nullable=True)
     profile_photo: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

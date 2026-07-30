@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAppState } from './state/AppState';
 import {
@@ -17,8 +17,8 @@ import {
 } from './components';
 import type { CreateProfileInput, CreateTravelRequestInput, Traveller } from './types';
 
-function travellerEmoji(traveller: Traveller) {
-  if (traveller.gender === 'woman' && traveller.verifiedWoman) {
+function travellerBadgeLabel(traveller: Traveller) {
+  if (traveller.gender === 'female' && traveller.verifiedWoman) {
     return 'Verified woman';
   }
 
@@ -26,15 +26,47 @@ function travellerEmoji(traveller: Traveller) {
 }
 
 export function LoginScreen() {
-  const { login, state } = useAppState();
+  const { login, register, state } = useAppState();
   const navigate = useNavigate();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [email, setEmail] = useState('rahul@hoply.app');
   const [password, setPassword] = useState('password');
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [gender, setGender] = useState('prefer_not_to_say');
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    login(email, password);
-    navigate('/app/dashboard');
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await register({ name, email, password, phoneNumber, gender });
+      setSuccess('Account created! Let us complete your profile...');
+      setTimeout(() => navigate('/app/profile-setup'), 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -54,10 +86,6 @@ export function LoginScreen() {
             Hoply connects verified travellers going to the same destination before the taxi is booked, so rides are safer,
             cheaper and easier to coordinate.
           </p>
-          <div className="hero-actions">
-            <Button onClick={() => navigate('/app/create-request')}>Create Trip</Button>
-            <Button variant="secondary" onClick={() => navigate('/app/discovery')}>Browse Travellers</Button>
-          </div>
           <div className="hero-metrics">
             <StatTile label="Trusted travellers" value="10,000+" />
             <StatTile label="Average savings" value="45%" accent="blue" />
@@ -78,21 +106,39 @@ export function LoginScreen() {
       </section>
 
       <section className="auth-card">
-        <h2>Welcome back</h2>
-        <p>Log in to continue.</p>
-        <div className="stack">
-          <Button variant="secondary">Continue with Google</Button>
-          <Button variant="secondary">Continue with Apple</Button>
+        <div className="tabs" role="tablist">
+          <button type="button" className={`tab ${mode === 'login' ? 'tab-active' : ''}`} onClick={() => setMode('login')} role="tab" aria-selected={mode === 'login'}>Log in</button>
+          <button type="button" className={`tab ${mode === 'register' ? 'tab-active' : ''}`} onClick={() => setMode('register')} role="tab" aria-selected={mode === 'register'}>Sign up</button>
         </div>
-        <div className="divider">or</div>
-        <form className="stack" onSubmit={handleLogin}>
-          <Input label="Email address" value={email} onChange={event => setEmail(event.target.value)} />
-          <Input label="Password" type="password" value={password} onChange={event => setPassword(event.target.value)} />
-          <Button type="submit">Log in</Button>
-        </form>
-        <p className="auth-note">
-          {state.profile ? 'A profile already exists in this session.' : 'After login, Hoply will prompt you to create a profile if one does not exist.'}
-        </p>
+
+        {error ? <div className="banner banner-error">{error}</div> : null}
+        {success ? <div className="banner banner-success">{success}</div> : null}
+
+        {mode === 'login' ? (
+          <form className="auth-form" onSubmit={handleLogin}>
+            <Input label="Email address" type="email" value={email} onChange={event => setEmail(event.target.value)} required />
+            <Input label="Password" type="password" value={password} onChange={event => setPassword(event.target.value)} required />
+            <Button type="submit" disabled={loading}>
+              {loading ? <span className="btn-loading"><span className="spinner" /> Logging in...</span> : 'Log in'}
+            </Button>
+          </form>
+        ) : (
+          <form className="auth-form" onSubmit={handleRegister}>
+            <Input label="Full name" value={name} onChange={event => setName(event.target.value)} required />
+            <Input label="Email address" type="email" value={email} onChange={event => setEmail(event.target.value)} required />
+            <Input label="Phone number" type="tel" value={phoneNumber} onChange={event => setPhoneNumber(event.target.value)} required placeholder="+919876543210" />
+            <Input label="Password" type="password" value={password} onChange={event => setPassword(event.target.value)} required minLength={8} />
+            <Select label="Gender" value={gender} onChange={event => setGender(event.target.value)}>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+            </Select>
+            <Button type="submit" disabled={loading}>
+              {loading ? <span className="btn-loading"><span className="spinner" /> Creating account...</span> : 'Create account'}
+            </Button>
+          </form>
+        )}
       </section>
     </div>
   );
@@ -268,7 +314,7 @@ export function DiscoveryScreen() {
       return filtered;
     }
 
-    return filtered.filter(traveller => traveller.gender === 'woman' && traveller.verifiedWoman);
+    return filtered.filter(traveller => traveller.gender === 'female' && traveller.verifiedWoman);
   }, [state.travellers, state.womenOnly]);
 
   return (
@@ -292,7 +338,7 @@ export function DiscoveryScreen() {
                 <div>
                   <h3>{traveller.name}</h3>
                   <p>{traveller.destination}</p>
-                  <Badge tone={traveller.verifiedWoman ? 'success' : 'info'}>{travellerEmoji(traveller)}</Badge>
+                  <Badge tone={traveller.verifiedWoman ? 'success' : 'info'}>{travellerBadgeLabel(traveller)}</Badge>
                 </div>
                 <div className="compatibility-pill">{traveller.compatibility}% match</div>
               </div>
@@ -616,7 +662,7 @@ export function UserProfileScreen() {
         <PageHeader title="User Profile" subtitle="Personal information, travel preferences, languages and ride history in one place." />
         <Card className="profile-hero">
           <div className="profile-top">
-            <Avatar initials={profile?.photo ?? 'RS'} className="avatar-large" />
+            <Avatar initials={profile?.avatar ?? 'RS'} className="avatar-large" />
             <div>
               <div className="profile-title-row">
                 <h2>{profile?.name ?? 'Rahul Sharma'}</h2>
@@ -698,54 +744,124 @@ export function EmptyStatesScreen() {
   );
 }
 
-export function ProfileSetupModal() {
-  const { state, saveProfile } = useAppState();
-  const [form, setForm] = useState<CreateProfileInput>({
-    name: state.profile?.name ?? '',
-    email: state.profile?.email ?? '',
-    phone: state.profile?.phone ?? '',
-    gender: state.profile?.gender ?? 'prefer-not-to-say',
-    languages: state.profile?.languages.join(', ') ?? 'English, Hindi',
-    preferredDestinations: state.profile?.preferredDestinations.join(', ') ?? 'Whitefield, Electronic City',
-    bio: state.profile?.bio ?? 'Frequent traveller looking for safe, compatible cab companions.',
-    verified: state.profile?.verified ?? true,
-    womenOnly: state.settings.womenOnlyMatching,
-  });
+export function ProfileSetupScreen() {
+  const { state, updateProfile } = useAppState();
+  const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [name, setName] = useState(state.profile?.name ?? '');
+  const [age, setAge] = useState(state.profile?.age?.toString() ?? '');
+  const [gender, setGender] = useState(state.profile?.gender ?? 'prefer_not_to_say');
+  const [profession, setProfession] = useState(state.profile?.profession ?? '');
+  const [hometown, setHometown] = useState(state.profile?.hometown ?? '');
+  const [bio, setBio] = useState(state.profile?.bio ?? '');
+  const [photoPreview, setPhotoPreview] = useState(state.profile?.avatar ?? '');
+  const [photoFile, setPhotoFile] = useState<string | null>(null);
 
   if (!state.authenticated || !state.needsProfileSetup) {
-    return null;
+    return (
+      <div className="page-grid narrow-page">
+        <PageHeader title="Profile Setup" subtitle="Complete your profile to get started." />
+        <p>You are already set up. <Link to="/app/dashboard">Go to dashboard</Link></p>
+      </div>
+    );
   }
 
-  function handleChange<K extends keyof CreateProfileInput>(field: K, value: CreateProfileInput[K]) {
-    setForm(previous => ({ ...previous, [field]: value }));
+  function handlePhotoClick() {
+    fileRef.current?.click();
   }
+
+  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target?.result as string;
+      setPhotoPreview(dataUrl);
+      setPhotoFile(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await updateProfile({
+        name,
+        age: age ? parseInt(age, 10) : null,
+        gender,
+        profession: profession || null,
+        hometown: hometown || null,
+        bio: bio || null,
+        profilePhoto: photoFile,
+      });
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save profile');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const initials = name
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <Modal open title="Create your Hoply profile" onClose={() => undefined}>
-      <p>Hoply needs a profile before discovery so matching can happen safely and cleanly.</p>
-      <form
-        className="form-grid modal-form"
-        onSubmit={event => {
-          event.preventDefault();
-          saveProfile(form);
-        }}
-      >
-        <Input label="Name" value={form.name} onChange={event => handleChange('name', event.target.value)} />
-        <Input label="Email" value={form.email} onChange={event => handleChange('email', event.target.value)} />
-        <Input label="Phone" value={form.phone} onChange={event => handleChange('phone', event.target.value)} />
-        <Select label="Gender" value={form.gender} onChange={event => handleChange('gender', event.target.value as CreateProfileInput['gender'])}>
-          <option value="woman">Woman</option>
-          <option value="man">Man</option>
-          <option value="non-binary">Non-binary</option>
-          <option value="prefer-not-to-say">Prefer not to say</option>
-        </Select>
-        <Input label="Languages" value={form.languages} onChange={event => handleChange('languages', event.target.value)} />
-        <Input label="Preferred destinations" value={form.preferredDestinations} onChange={event => handleChange('preferredDestinations', event.target.value)} />
-        <TextArea label="Bio" value={form.bio} onChange={event => handleChange('bio', event.target.value)} rows={4} />
-        <Toggle checked={form.verified} onChange={value => handleChange('verified', value)} label="Verified profile" hint="Helps with trust and safety" />
-        <Toggle checked={form.womenOnly} onChange={value => handleChange('womenOnly', value)} label="Women-only matching" hint="Surface verified women profiles in discovery" />
-        <Button type="submit">Save profile</Button>
-      </form>
-    </Modal>
+    <div className="setup-page">
+      <div className="setup-card">
+        <div className="brand brand-large">
+          <span className="brand-mark">H</span>
+          <span>
+            Hoply
+            <small>Complete your profile</small>
+          </span>
+        </div>
+
+        <p className="setup-intro">
+          One last step. Fill in your details so travellers can discover and trust you.
+        </p>
+
+        {error ? <div className="banner banner-error">{error}</div> : null}
+
+        <form className="setup-form" onSubmit={handleSubmit}>
+          <div className="setup-photo-section">
+            <button type="button" className="setup-photo-btn" onClick={handlePhotoClick} title="Upload photo">
+              {photoFile || state.profile?.avatar?.match(/^data:/) ? (
+                <img src={photoFile ?? state.profile!.avatar} alt="Preview" className="setup-photo-img" />
+              ) : (
+                <span className="setup-photo-placeholder">{initials}</span>
+              )}
+              <span className="setup-photo-hint">Tap to upload</span>
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="setup-photo-input" onChange={handlePhotoChange} />
+          </div>
+
+          <div className="setup-fields">
+            <Input label="Full name" value={name} onChange={e => setName(e.target.value)} required />
+            <Input label="Age" type="number" min={13} max={120} value={age} onChange={e => setAge(e.target.value)} />
+            <Select label="Gender" value={gender} onChange={e => setGender(e.target.value as typeof gender)}>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+            </Select>
+            <Input label="Profession" value={profession} onChange={e => setProfession(e.target.value)} placeholder="e.g. Software Engineer" />
+            <Input label="Hometown" value={hometown} onChange={e => setHometown(e.target.value)} placeholder="e.g. Bengaluru" />
+            <TextArea label="Bio" value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Tell travellers a bit about yourself..." />
+          </div>
+
+          <Button type="submit" disabled={loading}>
+            {loading ? <span className="btn-loading"><span className="spinner" /> Saving...</span> : 'Complete profile'}
+          </Button>
+        </form>
+      </div>
+    </div>
   );
 }
