@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+venv/
+.env/
+env/
+.venv/
+.ENV/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python testing
+.pytest_cache/
+
+# Local environment and secret files
+.env
+.env.*
+
+# Database files
+*.sqlite3
+*.db
+
+# Ignore the auto-move utility directory
+auto_move_file/

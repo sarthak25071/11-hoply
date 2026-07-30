@@ -1,0 +1,957 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Hoply — REST API Specification
+# Find your travel companion. Share the ride. Save money. Meet people.
+# -----------------------------------------------------------------------------
+# Design principles (REST / industry standards):
+#   - Resource-oriented, plural nouns:            /users, /locations, /travel-plans
+#   - HTTP verbs carry intent:                    GET (read), POST (create),
+#                                                 PATCH (partial update), DELETE
+#   - Sub-actions on a resource use POST + verb:  /matches/{id}/accept
+#   - Consistent, envelope-free bodies; errors use RFC 9457 Problem Details
+#   - Cursor + page/limit pagination on collections
+#   - Correlation via ETag / If-Match for optimistic concurrency
+#   - Stateless auth via Bearer JWT (Authorization header)
+# =============================================================================
+
+info:
+  title: Hoply API
+  version: 1.0.0
+  description: |
+    Hoply connects travellers heading in the same direction so they can share a
+    taxi. Users publish a **travel plan** (source, destination, time window,
+    luggage), discover compatible travellers, and exchange **match** requests.
+    Contact details are revealed only after both parties accept.
+
+    ### Conventions
+    - All timestamps are ISO 8601 / RFC 3339 in UTC (e.g. `2026-07-30T09:15:00Z`).
+    - IDs are opaque strings (server generates them).
+    - Errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457).
+    - Money is returned in minor units (paise) with an ISO 4217 `currency`.
+  contact:
+    name: Hoply Engineering
+    url: https://hoply.example.com
+    email: api@hoply.example.com
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.hoply.example.com/v1
+    description: Production
+  - url: https://staging-api.hoply.example.com/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Registration and token issuance.
+  - name: Users
+    description: User accounts and traveller profiles.
+  - name: Locations
+    description: Catalog of airports, depots, stations and localities.
+  - name: Travel Plans
+    description: Traveller requests to share a ride.
+  - name: Discovery
+    description: Compatibility-ranked traveller discovery and fare estimates.
+  - name: Matches
+    description: Match request lifecycle (send / accept / reject / cancel).
+  - name: Notifications
+    description: In-app notification feed.
+
+security:
+  - bearerAuth: []
+
+# =============================================================================
+# Paths
+# =============================================================================
+paths:
+
+  # ------------------------------------------------------------------ Auth ---
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      operationId: registerUser
+      security: []          # public endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserRegistration' }
+      responses:
+        '201':
+          description: User created.
+          headers:
+            Location:
+              description: URI of the newly created user.
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /auth/token:
+    post:
+      tags: [Auth]
+      summary: Exchange credentials for an access token
+      operationId: issueToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Token issued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ----------------------------------------------------------------- Users ---
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the authenticated user
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: The current user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Users]
+      summary: Update the authenticated user's profile
+      operationId: updateCurrentUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserIdPath'
+    get:
+      tags: [Users]
+      summary: Get a public traveller profile
+      description: >
+        Returns the public-facing traveller profile. Contact fields
+        (phone) are omitted unless the caller shares an accepted match.
+      operationId: getUserById
+      responses:
+        '200':
+          description: Traveller profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TravellerProfile' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------- Locations ---
+  /locations:
+    get:
+      tags: [Locations]
+      summary: List / search locations
+      operationId: listLocations
+      parameters:
+        - name: q
+          in: query
+          description: Free-text search over location name.
+          schema: { type: string, maxLength: 150 }
+        - name: region
+          in: query
+          description: Filter by broader area / district.
+          schema: { type: string }
+        - name: city
+          in: query
+          description: Filter by city.
+          schema: { type: string }
+        - name: country
+          in: query
+          description: Filter by country.
+          schema: { type: string }
+        - name: type
+          in: query
+          description: Filter by place type.
+          schema: { $ref: '#/components/schemas/PlaceType' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of locations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocationPage' }
+    post:
+      tags: [Locations]
+      summary: Create a location
+      operationId: createLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationInput' }
+      responses:
+        '201':
+          description: Location created.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /locations/{locationId}:
+    parameters:
+      - $ref: '#/components/parameters/LocationIdPath'
+    get:
+      tags: [Locations]
+      summary: Get a location
+      operationId: getLocationById
+      responses:
+        '200':
+          description: The location.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------- Travel Plans ---
+  /travel-plans:
+    get:
+      tags: [Travel Plans]
+      summary: List travel plans
+      description: Lists the authenticated user's own plans by default.
+      operationId: listTravelPlans
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TravelPlanStatus' }
+        - name: mine
+          in: query
+          description: When true (default) returns only the caller's plans.
+          schema: { type: boolean, default: true }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of travel plans.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TravelPlanPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Travel Plans]
+      summary: Create a travel plan
+      operationId: createTravelPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TravelPlanInput' }
+      responses:
+        '201':
+          description: Travel plan created.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TravelPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          $ref: '#/components/responses/Conflict'   # duplicate active plan
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /travel-plans/{planId}:
+    parameters:
+      - $ref: '#/components/parameters/PlanIdPath'
+    get:
+      tags: [Travel Plans]
+      summary: Get a travel plan
+      operationId: getTravelPlanById
+      responses:
+        '200':
+          description: The travel plan.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TravelPlan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Travel Plans]
+      summary: Update a travel plan
+      operationId: updateTravelPlan
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TravelPlanUpdate' }
+      responses:
+        '200':
+          description: Updated travel plan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TravelPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Travel Plans]
+      summary: Cancel / delete a travel plan
+      description: Cancels the plan (US-10). Idempotent — repeat calls return 204.
+      operationId: deleteTravelPlan
+      responses:
+        '204': { description: Plan cancelled. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /travel-plans/{planId}/matches:
+    parameters:
+      - $ref: '#/components/parameters/PlanIdPath'
+    get:
+      tags: [Discovery]
+      summary: Discover compatible travellers for a plan
+      description: >
+        Returns other active travel plans ranked by compatibility score
+        (destination proximity, time overlap, luggage). Powers US-2 / US-3.
+      operationId: discoverMatchesForPlan
+      parameters:
+        - name: minScore
+          in: query
+          description: Minimum compatibility score (0–100).
+          schema: { type: integer, minimum: 0, maximum: 100, default: 0 }
+        - name: radiusKm
+          in: query
+          description: Max destination distance in kilometres.
+          schema: { type: number, minimum: 0, maximum: 50, default: 4 }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Ranked candidate travellers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CandidatePage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /travel-plans/{planId}/fare-estimate:
+    parameters:
+      - $ref: '#/components/parameters/PlanIdPath'
+    get:
+      tags: [Discovery]
+      summary: Estimate taxi fare and per-person split
+      description: Powers US-8 (fare split estimate).
+      operationId: getFareEstimate
+      parameters:
+        - name: passengers
+          in: query
+          description: Number of people sharing (defaults to plan passenger count).
+          schema: { type: integer, minimum: 1, maximum: 10 }
+      responses:
+        '200':
+          description: Fare estimate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FareEstimate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # --------------------------------------------------------------- Matches ---
+  /matches:
+    get:
+      tags: [Matches]
+      summary: List match requests
+      operationId: listMatches
+      parameters:
+        - name: direction
+          in: query
+          description: Filter by incoming or outgoing requests.
+          schema: { type: string, enum: [incoming, outgoing], default: incoming }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/MatchStatus' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of matches.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Matches]
+      summary: Send a match request
+      description: US-4. Creating a duplicate pair returns 409.
+      operationId: createMatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MatchInput' }
+      responses:
+        '201':
+          description: Match request sent.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Match' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /matches/{matchId}:
+    parameters:
+      - $ref: '#/components/parameters/MatchIdPath'
+    get:
+      tags: [Matches]
+      summary: Get a match
+      operationId: getMatchById
+      responses:
+        '200':
+          description: The match. Contact details included only when accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Match' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /matches/{matchId}/accept:
+    parameters:
+      - $ref: '#/components/parameters/MatchIdPath'
+    post:
+      tags: [Matches]
+      summary: Accept a match request
+      description: US-5. On acceptance, contact details are shared (US-9).
+      operationId: acceptMatch
+      responses:
+        '200':
+          description: Match accepted; confirmation returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchConfirmation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          $ref: '#/components/responses/Conflict'   # already resolved
+
+  /matches/{matchId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/MatchIdPath'
+    post:
+      tags: [Matches]
+      summary: Reject a match request
+      operationId: rejectMatch
+      responses:
+        '200':
+          description: Match rejected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Match' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /matches/{matchId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/MatchIdPath'
+    post:
+      tags: [Matches]
+      summary: Cancel an outgoing match request
+      operationId: cancelMatch
+      responses:
+        '200':
+          description: Match cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Match' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # --------------------------------------------------------- Notifications ---
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      operationId: listNotifications
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [unread, read] }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of notifications.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications/{notificationId}:
+    parameters:
+      - $ref: '#/components/parameters/NotificationIdPath'
+    patch:
+      tags: [Notifications]
+      summary: Mark a notification read/unread
+      operationId: updateNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [unread, read] }
+              required: [status]
+      responses:
+        '200':
+          description: Updated notification.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# =============================================================================
+# Components
+# =============================================================================
+components:
+
+  # ------------------------------------------------------- Security schemes ---
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Stateless JWT access token in the `Authorization` header.
+
+  # ------------------------------------------------------------- Parameters ---
+  parameters:
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    LocationIdPath:
+      name: locationId
+      in: path
+      required: true
+      schema: { type: string }
+    PlanIdPath:
+      name: planId
+      in: path
+      required: true
+      schema: { type: string }
+    MatchIdPath:
+      name: matchId
+      in: path
+      required: true
+      schema: { type: string }
+    NotificationIdPath:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string }
+    PageParam:
+      name: page
+      in: query
+      description: 1-based page number.
+      schema: { type: integer, minimum: 1, default: 1 }
+    LimitParam:
+      name: limit
+      in: query
+      description: Items per page.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    IfMatch:
+      name: If-Match
+      in: header
+      description: ETag for optimistic concurrency control.
+      required: false
+      schema: { type: string }
+
+  # ---------------------------------------------------------------- Headers ---
+  headers:
+    ETag:
+      description: Entity tag for optimistic concurrency.
+      schema: { type: string }
+
+  # -------------------------------------------------------- Reusable errors ---
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Authenticated but not allowed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Conflicts with current state (e.g. duplicate).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PreconditionFailed:
+      description: If-Match precondition failed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnprocessableEntity:
+      description: Semantic validation failed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  # ----------------------------------------------------------------- Schemas ---
+  schemas:
+
+    # ---- Enumerations (aligned with schema.sql ENUMs) ----
+    Gender:
+      type: string
+      enum: [male, female, other, prefer_not_to_say]
+    PlaceType:
+      type: string
+      enum: [airport, railway_station, bus_depot, metro_station, locality, other]
+    LuggageType:
+      type: string
+      enum: [none, backpack, carry_on, suitcase, oversized]
+    TravelPlanStatus:
+      type: string
+      enum: [active, matched, cancelled, expired]
+    MatchStatus:
+      type: string
+      enum: [pending, accepted, rejected, cancelled]
+
+    # ---- Shared value objects ----
+    Coordinates:
+      type: object
+      properties:
+        latitude:  { type: number, format: double, minimum: -90,  maximum: 90 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180 }
+      required: [latitude, longitude]
+
+    Money:
+      type: object
+      description: Monetary amount in minor units (e.g. paise).
+      properties:
+        amountMinor: { type: integer, description: Amount in minor currency units. }
+        currency:    { type: string, description: ISO 4217 code., example: INR }
+      required: [amountMinor, currency]
+
+    # ---- Auth / Users ----
+    UserRegistration:
+      type: object
+      required: [name, email, password, phoneNumber]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 100 }
+        email:       { type: string, format: email, maxLength: 255 }
+        password:    { type: string, format: password, minLength: 8, maxLength: 128 }
+        phoneNumber: { type: string, maxLength: 20, example: "+919876543210" }
+        age:         { type: integer, minimum: 13, maximum: 120, nullable: true }
+        gender:      { $ref: '#/components/schemas/Gender' }
+        description: { type: string, maxLength: 1000, nullable: true }
+
+    UserUpdate:
+      type: object
+      description: Partial update; omitted fields are unchanged.
+      properties:
+        name:         { type: string, minLength: 1, maxLength: 100 }
+        age:          { type: integer, minimum: 13, maximum: 120, nullable: true }
+        gender:       { $ref: '#/components/schemas/Gender' }
+        description:  { type: string, maxLength: 1000, nullable: true }
+        profilePhoto: { type: string, format: uri, maxLength: 500, nullable: true }
+
+    User:
+      type: object
+      properties:
+        userId:       { type: string, readOnly: true }
+        name:         { type: string }
+        email:        { type: string, format: email }
+        phoneNumber:  { type: string }
+        age:          { type: integer, nullable: true }
+        gender:       { $ref: '#/components/schemas/Gender' }
+        description:  { type: string, nullable: true }
+        profilePhoto: { type: string, format: uri, nullable: true }
+        createdAt:    { type: string, format: date-time, readOnly: true }
+        updatedAt:    { type: string, format: date-time, readOnly: true }
+      required: [userId, name, email, phoneNumber, gender]
+
+    TravellerProfile:
+      type: object
+      description: Public traveller profile (no contact details).
+      properties:
+        userId:       { type: string }
+        name:         { type: string }
+        gender:       { $ref: '#/components/schemas/Gender' }
+        description:  { type: string, nullable: true }
+        profilePhoto: { type: string, format: uri, nullable: true }
+      required: [userId, name]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password }
+
+    TokenResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType:   { type: string, example: Bearer }
+        expiresIn:   { type: integer, description: Lifetime in seconds., example: 3600 }
+      required: [accessToken, tokenType, expiresIn]
+
+    # ---- Locations ----
+    LocationInput:
+      type: object
+      required: [name, region, city, country, type]
+      properties:
+        name:        { type: string, minLength: 1, maxLength: 150 }
+        region:      { type: string, minLength: 1, maxLength: 100 }
+        city:        { type: string, minLength: 1, maxLength: 100 }
+        country:     { type: string, minLength: 1, maxLength: 100 }
+        type:        { $ref: '#/components/schemas/PlaceType' }
+        coordinates: { $ref: '#/components/schemas/Coordinates' }
+
+    Location:
+      allOf:
+        - $ref: '#/components/schemas/LocationInput'
+        - type: object
+          properties:
+            locationId: { type: string, readOnly: true }
+            createdAt:  { type: string, format: date-time, readOnly: true }
+          required: [locationId]
+
+    LocationPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Location' }
+
+    # ---- Travel plans ----
+    TravelPlanInput:
+      type: object
+      required: [sourceLocationId, destLocationId, departFrom, departUntil]
+      properties:
+        sourceLocationId: { type: string }
+        destLocationId:   { type: string }
+        departFrom:       { type: string, format: date-time }
+        departUntil:      { type: string, format: date-time }
+        landmark:         { type: string, maxLength: 200, nullable: true }
+        destCoordinates:  { $ref: '#/components/schemas/Coordinates' }
+        otherInfo:        { type: string, maxLength: 2000, nullable: true }
+        luggageType:      { $ref: '#/components/schemas/LuggageType' }
+        luggageQuantity:  { type: integer, minimum: 0, maximum: 20, default: 0 }
+        passengerCount:   { type: integer, minimum: 1, maximum: 10, default: 1 }
+        expiresAt:        { type: string, format: date-time, nullable: true }
+
+    TravelPlanUpdate:
+      type: object
+      description: Partial update; omitted fields are unchanged.
+      properties:
+        departFrom:      { type: string, format: date-time }
+        departUntil:     { type: string, format: date-time }
+        landmark:        { type: string, maxLength: 200, nullable: true }
+        destCoordinates: { $ref: '#/components/schemas/Coordinates' }
+        otherInfo:       { type: string, maxLength: 2000, nullable: true }
+        luggageType:     { $ref: '#/components/schemas/LuggageType' }
+        luggageQuantity: { type: integer, minimum: 0, maximum: 20 }
+        passengerCount:  { type: integer, minimum: 1, maximum: 10 }
+        status:          { $ref: '#/components/schemas/TravelPlanStatus' }
+        expiresAt:       { type: string, format: date-time, nullable: true }
+
+    TravelPlan:
+      type: object
+      properties:
+        planId:          { type: string, readOnly: true }
+        userId:          { type: string, readOnly: true }
+        source:          { $ref: '#/components/schemas/Location' }
+        destination:     { $ref: '#/components/schemas/Location' }
+        departFrom:      { type: string, format: date-time }
+        departUntil:     { type: string, format: date-time }
+        landmark:        { type: string, nullable: true }
+        destCoordinates: { $ref: '#/components/schemas/Coordinates' }
+        otherInfo:       { type: string, nullable: true }
+        luggageType:     { $ref: '#/components/schemas/LuggageType' }
+        luggageQuantity: { type: integer }
+        passengerCount:  { type: integer }
+        status:          { $ref: '#/components/schemas/TravelPlanStatus' }
+        expiresAt:       { type: string, format: date-time, nullable: true }
+        createdAt:       { type: string, format: date-time, readOnly: true }
+        updatedAt:       { type: string, format: date-time, readOnly: true }
+      required: [planId, userId, source, destination, departFrom, departUntil, status]
+
+    TravelPlanPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/TravelPlan' }
+
+    # ---- Discovery ----
+    Candidate:
+      type: object
+      description: A compatible traveller surfaced during discovery.
+      properties:
+        plan:               { $ref: '#/components/schemas/TravelPlan' }
+        traveller:          { $ref: '#/components/schemas/TravellerProfile' }
+        compatibilityScore: { type: integer, minimum: 0, maximum: 100 }
+        destinationDistanceKm: { type: number, format: double }
+        estimatedSavings:   { $ref: '#/components/schemas/Money' }
+      required: [plan, traveller, compatibilityScore]
+
+    CandidatePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Candidate' }
+
+    FareEstimate:
+      type: object
+      properties:
+        totalFare:     { $ref: '#/components/schemas/Money' }
+        perPersonFare: { $ref: '#/components/schemas/Money' }
+        savings:       { $ref: '#/components/schemas/Money' }
+        passengers:    { type: integer }
+      required: [totalFare, perPersonFare, passengers]
+
+    # ---- Matches ----
+    MatchInput:
+      type: object
+      required: [requesterPlanId, receiverPlanId]
+      properties:
+        requesterPlanId: { type: string, description: Caller's plan making the request. }
+        receiverPlanId:  { type: string, description: Target traveller's plan. }
+
+    Match:
+      type: object
+      properties:
+        matchId:            { type: string, readOnly: true }
+        requesterPlanId:    { type: string }
+        receiverPlanId:     { type: string }
+        compatibilityScore: { type: integer, minimum: 0, maximum: 100, nullable: true }
+        status:             { $ref: '#/components/schemas/MatchStatus' }
+        createdAt:          { type: string, format: date-time, readOnly: true }
+        updatedAt:          { type: string, format: date-time, readOnly: true }
+      required: [matchId, requesterPlanId, receiverPlanId, status]
+
+    MatchConfirmation:
+      type: object
+      description: Returned on acceptance; reveals companion contact (US-9).
+      properties:
+        match:            { $ref: '#/components/schemas/Match' }
+        companion:        { $ref: '#/components/schemas/TravellerProfile' }
+        companionPhone:   { type: string, description: Revealed only after mutual acceptance. }
+        suggestedPickup:  { type: string, nullable: true }
+        fare:             { $ref: '#/components/schemas/FareEstimate' }
+      required: [match, companion, companionPhone]
+
+    MatchPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Match' }
+
+    # ---- Notifications ----
+    Notification:
+      type: object
+      properties:
+        notificationId: { type: string, readOnly: true }
+        matchId:        { type: string, nullable: true }
+        message:        { type: string }
+        status:         { type: string, enum: [unread, read] }
+        createdAt:      { type: string, format: date-time, readOnly: true }
+      required: [notificationId, message, status]
+
+    NotificationPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Notification' }
+
+    # ---- Pagination envelope ----
+    Page:
+      type: object
+      properties:
+        page:       { type: integer, example: 1 }
+        limit:      { type: integer, example: 20 }
+        totalItems: { type: integer, example: 42 }
+        totalPages: { type: integer, example: 3 }
+      required: [page, limit, totalItems, totalPages]
+
+    # ---- RFC 9457 Problem Details ----
+    Problem:
+      type: object
+      description: Error response per RFC 9457 (Problem Details for HTTP APIs).
+      properties:
+        type:     { type: string, format: uri, default: about:blank }
+        title:    { type: string, example: Validation failed }
+        status:   { type: integer, example: 422 }
+        detail:   { type: string, example: departUntil must be after departFrom. }
+        instance: { type: string, format: uri }
+        errors:
+          type: array
+          description: Field-level validation errors.
+          items:
+            type: object
+            properties:
+              field:  { type: string }
+              detail: { type: string }
+      required: [title, status]
