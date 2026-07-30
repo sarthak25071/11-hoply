@@ -1,4 +1,4 @@
-export type Gender = 'woman' | 'man' | 'non-binary' | 'prefer-not-to-say';
+export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
 export type LuggageSize = 'Small' | 'Medium' | 'Large';
 export type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
 export type NotificationType = 'match' | 'request' | 'trip' | 'safety' | 'reminder';
@@ -8,12 +8,15 @@ export interface UserProfile {
   name: string;
   email: string;
   phone: string;
-  photo: string;
+  avatar: string;
+  age: number | null;
   gender: Gender;
+  profession: string | null;
+  hometown: string | null;
+  bio: string;
   verified: boolean;
   languages: string[];
   preferredDestinations: string[];
-  bio: string;
   womenOnly: boolean;
 }
 

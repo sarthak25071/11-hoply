@@ -37,6 +37,8 @@ class User(CamelModel):
     age: int | None = None
     gender: Gender
     description: str | None = None
+    profession: str | None = None
+    hometown: str | None = None
     profile_photo: str | None = None
     created_at: datetime
     updated_at: datetime

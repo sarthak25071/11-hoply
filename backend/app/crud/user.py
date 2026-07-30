@@ -22,6 +22,11 @@ def get_by_phone(db: Session, phone_number: str) -> User | None:
     return db.scalar(select(User).where(User.phone_number == phone_number))
 
 
+def get_by_id(db: Session, user_id: int) -> User | None:
+    """Look up a user by primary key."""
+    return db.get(User, user_id)
+
+
 def create(db: Session, data: UserRegistration) -> User:
     """Persist a new user with a hashed password and return the stored record."""
     user = User(

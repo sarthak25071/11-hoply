@@ -14,13 +14,25 @@
   --yellow: #f59e0b;
   --red: #ef4444;
   --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  --shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.05);
   --radius-xl: 28px;
-  --radius-lg: 22px;
-  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
 }
 
-* {
-  box-sizing: border-box;
+*:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline-offset: 1px;
 }
 
 html,
@@ -91,8 +103,7 @@ button {
 }
 
 .auth-hero::after,
-.sidebar-card::after,
-.card::after {
+.sidebar-card::after {
   content: '';
   position: absolute;
   inset: auto -80px -80px auto;
@@ -227,9 +238,7 @@ button {
 .traveller,
 .map-pin,
 .empty-illustration,
-.trip-map,
 .map-illustration,
-.trip-map,
 .search-pill,
 .stat-tile,
 .quick-action,
@@ -393,7 +402,14 @@ button {
 }
 
 .card::after {
+  content: '';
+  position: absolute;
   inset: auto -60px -80px auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.12), transparent 60%);
+  pointer-events: none;
 }
 
 .field {
@@ -607,7 +623,6 @@ button {
 .trip-route,
 .chat-summary,
 .request-meta,
-.summary-list,
 .map-summary,
 .sidebar-stack {
   display: flex;
@@ -633,7 +648,6 @@ button {
 
 .card-head,
 .request-meta,
-.summary-list,
 .map-summary,
 .sidebar-stack,
 .chat-summary {
@@ -693,7 +707,6 @@ button {
 .invite-card,
 .sidebar-card,
 .mini-profile,
-.summary-list div,
 .map-summary div,
 .past-trip-item,
 .notification-card,
@@ -739,14 +752,12 @@ button {
 
 .mini-profile strong,
 .past-trip-item strong,
-.summary-list strong,
 .map-summary strong,
 .sidebar-stack strong {
   font-size: 14px;
 }
 
 .mini-profile span,
-.summary-list span,
 .map-summary span,
 .sidebar-stack span,
 .past-trip-item span {
@@ -757,6 +768,7 @@ button {
 .summary-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   width: 100%;
 }
 
@@ -814,7 +826,16 @@ button {
   align-content: start;
 }
 
-.map-illustration,
+.map-illustration {
+  min-height: 260px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.2), transparent 22%),
+    radial-gradient(circle at 80% 25%, rgba(37, 99, 235, 0.16), transparent 25%),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(236, 253, 245, 0.95));
+  border: 1px solid var(--border);
+}
+
 .trip-map {
   min-height: 260px;
   border-radius: 24px;
@@ -984,10 +1005,6 @@ button {
   gap: 12px;
 }
 
-.trip-map {
-  min-height: 220px;
-}
-
 .timeline {
   display: grid;
   gap: 12px;
@@ -1044,6 +1061,155 @@ button {
   height: 120px;
   border-radius: 20px;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(37, 99, 235, 0.12));
+}
+
+.banner {
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 14px;
+  animation: bannerIn 0.3s ease;
+}
+
+@keyframes bannerIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.banner-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--red);
+}
+
+.banner-success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--green-dark);
+}
+
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+  animation: formIn 0.25s ease;
+}
+
+@keyframes formIn {
+  from { opacity: 0; transform: translateX(6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.setup-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.14), transparent 24%),
+    linear-gradient(180deg, #f8fff9 0%, #eff8f5 100%);
+}
+
+.setup-card {
+  width: min(560px, 100%);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  padding: 32px;
+  display: grid;
+  gap: 20px;
+}
+
+.setup-intro {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.setup-form {
+  display: grid;
+  gap: 20px;
+}
+
+.setup-photo-section {
+  display: flex;
+  justify-content: center;
+}
+
+.setup-photo-btn {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 3px dashed rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.8);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.setup-photo-btn:hover {
+  border-color: var(--green);
+}
+
+.setup-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.setup-photo-placeholder {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: white;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  border-radius: 50%;
+}
+
+.setup-photo-hint {
+  position: absolute;
+  bottom: -6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.setup-photo-input {
+  display: none;
+}
+
+.setup-fields {
+  display: grid;
+  gap: 14px;
 }
 
 @media (max-width: 1180px) {

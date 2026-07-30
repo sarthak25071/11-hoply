@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+"""User routes: profile retrieval and updates."""
+=======
 """User routes: authenticated account and public traveller profiles.
 
 Implements:
@@ -5,14 +8,20 @@ Implements:
   PATCH /users/me       -> updateCurrentUser
   GET   /users/{userId} -> getUserById
 """
+>>>>>>> 9a85069c2480729c3c31c7b258b6c2af6099fb8e
 
 from typing import Annotated
 
 from app.api.deps import get_current_user, get_db
 from app.crud import user as user_crud
 from app.models.user import User as UserModel
+<<<<<<< HEAD
+from app.schemas.user import User, UserUpdate
+from fastapi import APIRouter, Depends, status
+=======
 from app.schemas.user import TravellerProfile, User, UserUpdate
 from fastapi import APIRouter, Depends, HTTPException, status
+>>>>>>> 9a85069c2480729c3c31c7b258b6c2af6099fb8e
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -27,7 +36,11 @@ CurrentUser = Annotated[UserModel, Depends(get_current_user)]
     operation_id="getCurrentUser",
 )
 def get_current_user_profile(current_user: CurrentUser) -> User:
+<<<<<<< HEAD
+    """Return the authenticated user's profile."""
+=======
     """Return the authenticated user's own account so the client can render their profile."""
+>>>>>>> 9a85069c2480729c3c31c7b258b6c2af6099fb8e
     return User.model_validate(current_user)
 
 
@@ -41,6 +54,14 @@ def update_current_user(
     current_user: CurrentUser,
     db: DbSession,
 ) -> User:
+<<<<<<< HEAD
+    """Update profile fields for the authenticated user."""
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return User.model_validate(current_user)
+=======
     """Apply a partial update to the authenticated user's profile and return the saved record."""
     user = user_crud.update(db, current_user, payload)
     return User.model_validate(user)
@@ -74,3 +95,4 @@ def _get_user_or_404(db: Session, user_id: str) -> UserModel:
             detail="User not found.",
         )
     return user
+>>>>>>> 9a85069c2480729c3c31c7b258b6c2af6099fb8e

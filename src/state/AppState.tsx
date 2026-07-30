@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api, clearToken, storeToken, type UserResponse } from '../services/api';
 import {
   demoMatchRequests,
   demoMessages,
   demoNotifications,
-  demoProfile,
   demoSettings,
   demoTravelRequest,
   demoTravellers,
@@ -20,11 +20,36 @@ import type {
   UserProfile,
 } from '../types';
 
+function mapBackendUser(user: UserResponse): UserProfile {
+  return {
+    id: user.userId,
+    name: user.name,
+    email: user.email,
+    phone: user.phoneNumber,
+    avatar: user.profilePhoto ?? user.name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase(),
+    age: user.age,
+    gender: user.gender as UserProfile['gender'],
+    profession: user.profession,
+    hometown: user.hometown,
+    verified: true,
+    languages: user.description?.split(',').map(l => l.trim()).filter(Boolean) ?? [],
+    preferredDestinations: [],
+    bio: user.description ?? '',
+    womenOnly: false,
+  };
+}
+
 type AppStateContextValue = {
   state: AppState;
-  login: (email: string, password: string) => void;
+  login: (email: string, password: string) => Promise<void>;
+  register: (payload: { name: string; email: string; password: string; phoneNumber: string; gender?: string }) => Promise<void>;
   logout: () => void;
-  saveProfile: (input: CreateProfileInput) => void;
+  updateProfile: (payload: { name?: string; age?: number | null; gender?: string; profession?: string | null; hometown?: string | null; bio?: string | null; profilePhoto?: string | null }) => Promise<void>;
   createTravelRequest: (input: CreateTravelRequestInput) => void;
   toggleWomenOnly: (value: boolean) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
@@ -85,63 +110,62 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.authenticated, String(state.authenticated));
-  }, [state.authenticated]);
-
-  useEffect(() => {
     if (state.profile) {
       localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
     }
-  }, [state.profile]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(state.settings));
-  }, [state.settings]);
+  }, [state.authenticated, state.profile, state.settings]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const tokenRes = await api.login(email, password);
+    storeToken(tokenRes.accessToken);
+    const user = await api.getProfile();
+    const profile = mapBackendUser(user);
+    setState(previous => ({
+      ...previous,
+      authenticated: true,
+      needsProfileSetup: false,
+      profile,
+    }));
+  }, []);
+
+  const register = useCallback(async (payload: { name: string; email: string; password: string; phoneNumber: string; gender?: string }) => {
+    await api.register(payload);
+    const tokenRes = await api.login(payload.email, payload.password);
+    storeToken(tokenRes.accessToken);
+    const user = await api.getProfile();
+    const profile = mapBackendUser(user);
+    setState(previous => ({
+      ...previous,
+      authenticated: true,
+      needsProfileSetup: true,
+      profile,
+    }));
+  }, []);
 
   const value = useMemo<AppStateContextValue>(() => ({
     state,
-    login(email: string) {
-      setState(previous => ({
-        ...previous,
-        authenticated: true,
-        needsProfileSetup: !previous.profile,
-        profile: previous.profile ?? {
-          ...demoProfile,
-          email,
-        },
-      }));
-    },
+    login,
+    register,
     logout() {
+      clearToken();
       setState(previous => ({ ...previous, authenticated: false }));
     },
-    saveProfile(input: CreateProfileInput) {
-      const profile: UserProfile = {
-        id: `user-${Date.now()}`,
+    async updateProfile(input) {
+      const updatedUser = await api.updateProfile({
         name: input.name,
-        email: input.email,
-        phone: input.phone,
-        photo: input.name
-          .split(' ')
-          .map(part => part[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase(),
+        age: input.age,
         gender: input.gender,
-        verified: input.verified,
-        languages: input.languages.split(',').map(language => language.trim()).filter(Boolean),
-        preferredDestinations: input.preferredDestinations.split(',').map(destination => destination.trim()).filter(Boolean),
-        bio: input.bio,
-        womenOnly: input.womenOnly,
-      };
-
+        description: input.bio,
+        profession: input.profession,
+        hometown: input.hometown,
+        profilePhoto: input.profilePhoto,
+      });
+      const profile = mapBackendUser(updatedUser);
       setState(previous => ({
         ...previous,
         profile,
         needsProfileSetup: false,
-        womenOnly: input.womenOnly,
-        settings: {
-          ...previous.settings,
-          womenOnlyMatching: input.womenOnly,
-        },
       }));
     },
     createTravelRequest(input: CreateTravelRequestInput) {
@@ -283,7 +307,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         notifications: previous.notifications.map(notification => ({ ...notification, read: true })),
       }));
     },
-  }), [state]);
+  }), [state, login, register]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
