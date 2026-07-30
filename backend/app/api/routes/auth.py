@@ -46,7 +46,7 @@ def register_user(
         )
 
     user = user_crud.create(db, payload)
-    response.headers["Location"] = f"{request.url_for('registerUser')}/{user.user_id}"
+    response.headers["Location"] = str(request.url_for("register_user"))
     return User.model_validate(user)
 
 
