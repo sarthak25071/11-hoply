@@ -1,0 +1,8 @@
+# Backend build artefacts / secrets
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
