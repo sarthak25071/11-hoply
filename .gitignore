@@ -1,3 +1,14 @@
+<<<<<<< HEAD
+node_modules/
+dist/
+.env
+.DS_Store
+npm-debug.log*
+vite.config.ts.timestamp-*
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+=======
 # Python
 __pycache__/
 *.py[cod]
@@ -42,3 +53,4 @@ desktop.ini
 # Ignore the auto-move utility directory
 auto_move_file/
 test.txt
+>>>>>>> f0375f8250115c3c939d520dfde39aeec257c206
